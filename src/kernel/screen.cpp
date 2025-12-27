@@ -4,12 +4,54 @@
 volatile uint16_t* video_memory = (volatile uint16_t*)0xB8000;
 int cursor_pos = 0;
 
+void disable_vga_cursor() {
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, 0x20);
+}
+
 void update_vga_cursor(int x, int y) {
     int pos = y * 80 + x;
     outb(0x3D4, 0x0F);
     outb(0x3D5, (uint8_t)(pos & 0xFF));
     outb(0x3D4, 0x0E);
     outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+}
+
+void draw_block_cursor(int x, int y) {
+    int pos = y * 80 + x;
+    
+    // Инвертируем цвета символа под курсором
+    uint16_t current = video_memory[pos];
+    uint8_t ch = current & 0xFF;
+    uint8_t color = (current >> 8) & 0xFF;
+    
+    // Инвертируем fg и bg
+    uint8_t fg = color & 0x0F;
+    uint8_t bg = (color >> 4) & 0x0F;
+    uint8_t inverted_color = (fg << 4) | bg;
+    
+    // Если пробел, рисуем блок
+    if (ch == ' ' || ch == 0) {
+        ch = 219;  // Символ █
+    }
+    
+    // Отрисовываем инвертированный символ
+    video_memory[pos] = (inverted_color << 8) | ch;
+}
+
+void clear_block_cursor(int x, int y) {
+    int pos = y * 80 + x;
+    
+    // Восстанавливаем нормальный цвет
+    uint16_t current = video_memory[pos];
+    uint8_t ch = current & 0xFF;
+    
+    // Если это был блок курсора, заменяем на пробел
+    if (ch == 219) {
+        ch = ' ';
+    }
+    
+    video_memory[pos] = 0x0F00 | ch;
 }
 
 void print_char(char c) {
@@ -22,16 +64,19 @@ void print_char(char c) {
         video_memory[cursor_pos++] = c | 0x0F00;
     }
     
-    // ИСПРАВЛЕНО: Прокрутка 
-    if (cursor_pos >= 80 * 25) { 
+    // Прокрутка экрана
+    if (cursor_pos >= 80 * 25) {
         for(int i = 0; i < 80 * 24; i++) {
             video_memory[i] = video_memory[i + 80];
         }
+        
         for(int i = 80 * 24; i < 80 * 25; i++) {
             video_memory[i] = 0x0F00;
         }
+        
         cursor_pos = 80 * 24;
     }
+    
     update_vga_cursor(cursor_pos % 80, cursor_pos / 80);
 }
 

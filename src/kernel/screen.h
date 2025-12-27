@@ -8,6 +8,9 @@ extern volatile uint16_t* video_memory;
 extern int cursor_pos;
 
 extern "C" {
+    void disable_vga_cursor();
+    void draw_block_cursor(int x, int y);
+    void clear_block_cursor(int x, int y);
     void update_vga_cursor(int x, int y);
     void print_char(char c); 
     void print(const char* str);

@@ -1,107 +1,82 @@
 #!/bin/bash
+
 set -e
 
 # ==============================================
-# КОНФИГУРАЦИЯ И ИНСТРУМЕНТАРИЙ
+# Конфигурация
 # ==============================================
-# Кросс-компилятор (оставьте пустым, если используете локальный GCC с флагом -m32)
+
 CROSS=""
 CC="${CROSS}g++"
-# Используем GCC для компиляции ассемблера с флагом -m32 для 32-битного вывода
-AS="${CROSS}gcc -m32 -c -x assembler" 
+AS="${CROSS}gcc -m32 -c -x assembler"
 LD="${CROSS}ld"
 
-# ==============================================
-# НАСТРОЙКИ ПРОЕКТА
-# ==============================================
 BUILD_DIR="build"
 ISO_DIR="isodir"
 KERNEL_ELF="$BUILD_DIR/kernel.elf"
 GRUB_CFG="boot/grub/grub.cfg"
-ISO_FILE="Terminus_OS.iso" # Финальное имя образа
+ISO_FILE="Terminus_OS.iso"
 
-# Флаги компиляции C++
 CFLAGS="-m32 -ffreestanding -O2 -std=gnu++17 -fno-exceptions -fno-rtti"
-# Флаги линковщика (linker.ld находится в корне src/)
-LDFLAGS="-m elf_i386 -T src/linker.ld -nostdlib" 
-
-# Список всех исходных файлов для компиляции, на основе структуры src/
-# Этот список устранит все ошибки 'undefined reference'.
-ALL_SOURCES=(
-    # Основные файлы (имена файлов соответствуют структуре )
-    src/boot.s
-    src/interrupts_asm.s
-    
-    # Kernel & Core
-    src/kernel/kernel.cpp
-    src/kernel/interrupts.cpp
-    src/kernel/keyboard.cpp
-    src/kernel/panic.cpp
-    src/kernel/screen.cpp
-    
-    # Lib (Библиотечные функции: strlen, strcmp, strcpy и т.д.)
-    src/lib/string.cpp
-    src/lib/utils.cpp
-
-    # File System
-    src/fs/fat16.cpp
-    src/fs/vfs.cpp
-    
-    # Shell & Commands
-    src/shell/builtin.cpp
-    src/shell/shell.cpp
-    src/drivers/commands/cmd_info.cpp
-    src/drivers/commands/cmd_nano.cpp
-    
-    # Drivers
-    src/drivers/disk.cpp
-)
+LDFLAGS="-m elf_i386 -T src/linker.ld -nostdlib"
 
 # ==============================================
-# ЭТАП 1: СБОРКА ЯДРА (ELF)
+# Stage 1: Сборка ядра
 # ==============================================
+
 echo "=== Stage 1: Building kernel ==="
-# Создаем все необходимые директории
-mkdir -p $BUILD_DIR $BUILD_DIR/kernel $BUILD_DIR/lib $BUILD_DIR/fs $BUILD_DIR/shell $BUILD_DIR/drivers $BUILD_DIR/drivers/commands
+
+# Создаём все необходимые директории
+mkdir -p $BUILD_DIR/{kernel,lib,fs,shell,drivers/commands}
+
+# Автоматически находим все исходники
+echo "Scanning for source files..."
+
+CPP_FILES=$(find src -name "*.cpp" -type f)
+ASM_FILES=$(find src -name "*.s" -type f)
 
 OBJ_LIST=""
 
-for SRC_FILE in "${ALL_SOURCES[@]}"; do
-    # Заменяем src/ на build/ и расширение на .o
-    OBJ_FILE=$(echo $SRC_FILE | sed "s|^src/|$BUILD_DIR/|;s|\.s$|\.o|;s|\.cpp$|\.o|")
+# Компилируем .s файлы (ассемблер)
+for SRC_FILE in $ASM_FILES; do
+    OBJ_FILE=$(echo $SRC_FILE | sed "s|^src/|$BUILD_DIR/|;s|\.s$|\.o|")
     
-    echo "Compiling $SRC_FILE..."
-
-    if [ -f "$SRC_FILE" ]; then
-        if [[ "$SRC_FILE" == *.s ]]; then
-            # Ассемблерные файлы (используем $AS с -m32)
-            $AS $SRC_FILE -o $OBJ_FILE
-        else
-            # C/C++ файлы (используем $CC с $CFLAGS)
-            $CC $CFLAGS -c $SRC_FILE -o $OBJ_FILE
-        fi
-        
-        OBJ_LIST="$OBJ_LIST $OBJ_FILE"
-    else
-        echo "ERROR: Missing file $SRC_FILE. Check your file structure."
-        exit 1
-    fi
+    echo "Assembling $SRC_FILE..."
+    
+    # Создаём директорию для объектника, если нужно
+    mkdir -p "$(dirname "$OBJ_FILE")"
+    
+    $AS $SRC_FILE -o $OBJ_FILE
+    OBJ_LIST="$OBJ_LIST $OBJ_FILE"
 done
 
-# 1.4 Линковка в kernel.elf
+# Компилируем .cpp файлы
+for SRC_FILE in $CPP_FILES; do
+    OBJ_FILE=$(echo $SRC_FILE | sed "s|^src/|$BUILD_DIR/|;s|\.cpp$|\.o|")
+    
+    echo "Compiling $SRC_FILE..."
+    
+    # Создаём директорию для объектника, если нужно
+    mkdir -p "$(dirname "$OBJ_FILE")"
+    
+    $CC $CFLAGS -c $SRC_FILE -o $OBJ_FILE
+    OBJ_LIST="$OBJ_LIST $OBJ_FILE"
+done
+
+# Линковка ядра
 echo "Linking $KERNEL_ELF..."
-# Используем полный список объектных файлов
 $LD $LDFLAGS $OBJ_LIST -o $KERNEL_ELF
 
 echo "Kernel built: $KERNEL_ELF"
 
 # ==============================================
-# ЭТАП 2: СБОРКА ISO С GRUB
+# Stage 2: Создание ISO
 # ==============================================
+
 echo "=== Stage 2: Creating ISO ==="
 
 if [ ! -f "$GRUB_CFG" ]; then
-    echo "ERROR: Missing $GRUB_CFG. Please create the file: boot/grub/grub.cfg"
+    echo "ERROR: Missing $GRUB_CFG"
     exit 1
 fi
 
@@ -111,11 +86,16 @@ mkdir -p $ISO_DIR/boot/grub
 cp $KERNEL_ELF $ISO_DIR/boot/kernel.elf
 cp $GRUB_CFG $ISO_DIR/boot/grub/grub.cfg
 
-# Создаём ISO с финальным именем
-grub-mkrescue -o $ISO_FILE $ISO_DIR
+grub-mkrescue -o $ISO_FILE $ISO_DIR 2>/dev/null
 
 echo "ISO created: $ISO_FILE"
 
 # ==============================================
-# ЭТАП 3: Удален
+# Статистика
 # ==============================================
+
+echo ""
+echo "=== Build complete! ==="
+echo "Total source files compiled: $(echo $CPP_FILES $ASM_FILES | wc -w)"
+echo "Kernel size: $(du -h $KERNEL_ELF | cut -f1)"
+echo "ISO size: $(du -h $ISO_FILE | cut -f1)"
