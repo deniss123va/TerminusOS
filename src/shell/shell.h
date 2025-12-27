@@ -25,6 +25,7 @@ extern "C" {
     void shell_add_to_history(const char* cmd);
     void shell_load_history(int index);
     void process_command(); // Встроенная функция обработки команд
+    void fat_format_disk();
 }
 
 #endif // SHELL_H

@@ -2,14 +2,12 @@
 #define BUILTIN_H
 
 extern "C" {
-    // VFS commands
-    void cmd_ls_vfs();
-    void cmd_cat(char* name);
 
     // Disk/FAT16 commands
     void cmd_read_disk();
     void cmd_disk_cat(char* name); 
     void cmd_ls_disk();
+    void fat_format_disk();
     
     // Directory commands
     void cmd_pwd();
@@ -22,6 +20,8 @@ extern "C" {
     void cmd_nano();
     void cmd_create(char* filename);
     void cmd_info();
+
+    void cmd_fat_check();
 }
 
 #endif // BUILTIN_H

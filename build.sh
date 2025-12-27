@@ -45,7 +45,6 @@ ALL_SOURCES=(
 
     # File System
     src/fs/fat16.cpp
-    src/fs/vfs.cpp
     
     # Shell & Commands
     src/shell/builtin.cpp
@@ -115,7 +114,3 @@ cp $GRUB_CFG $ISO_DIR/boot/grub/grub.cfg
 grub-mkrescue -o $ISO_FILE $ISO_DIR
 
 echo "ISO created: $ISO_FILE"
-
-# ==============================================
-# ЭТАП 3: Удален
-# ==============================================

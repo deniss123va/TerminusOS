@@ -1,8 +1,7 @@
 #include "builtin.h"
 #include "../kernel/screen.h" 
 #include "../kernel/keyboard.h" 
-#include "../drivers/disk.h" 
-#include "../fs/vfs.h" 
+#include "../drivers/disk.h"
 #include "../fs/fat16.h" 
 #include "../lib/string.h" 
 #include "../lib/utils.h" 
@@ -11,15 +10,24 @@
 #include "../drivers/commands/cmd_nano.h"
 
 // **********************************************
-// ===== Shell Commands (Определения команд) =====
+// ===== Shell Commands =====
 // **********************************************
 
-// Выводит текущую директорию (человекопонятный путь)
 void cmd_pwd() {
     println(current_path);
 }
 
-// Смена директории (с обновлением пути)
+void cmd_fat_check() {
+    println("=== FAT Table Check ===");
+    
+    // Проверяем первые 20 кластеров
+    for (uint16_t cluster = 0; cluster < 20; cluster++) {
+        fat_debug_cluster_state(cluster);
+    }
+    
+    println("=== End Check ===");
+}
+
 void cmd_cd(char* name) {
     if (strcmp(name, "/") == 0) {
         current_dir_cluster = FAT_ROOT_DIR_CLUSTER;
@@ -33,13 +41,21 @@ void cmd_cd(char* name) {
         return;
     }
     
-    // ИСПРАВЛЕНИЕ: Используем новую структуру FAT_FindResult
-    FAT_FindResult result = fat_find_entry(name, 0x10); // Ищем только директории (0x10)
+    // Ищем запись. 0x10 = ищем директорию.
+    FAT_FindResult result = fat_find_entry(name, 0x10);
 
     if (!result.found) {
-        println("Error: Directory not found or is a file.");
+        println("Error: Directory not found.");
         return;
     }
+
+    // --- ИСПРАВЛЕНИЕ БАГА "TXT КАК ДИРЕКТОРИЯ" ---
+    // Дополнительная строгая проверка: действительно ли это директория?
+    if (!(result.entry.attributes & 0x10)) {
+        println("Error: This is a file, not a directory!");
+        return;
+    }
+    // ---------------------------------------------
 
     uint16_t target_cluster = result.entry.start_cluster;
 
@@ -48,7 +64,8 @@ void cmd_cd(char* name) {
         if (current_dir_cluster != FAT_ROOT_DIR_CLUSTER) {
             dirname(current_path); 
         }
-        if (target_cluster == 0) { 
+        // Если вернулись в корень, сбрасываем путь
+        if (target_cluster == 0 || target_cluster == FAT_ROOT_DIR_CLUSTER) { 
             strcpy(current_path, "/");
         }
     } else {
@@ -76,7 +93,7 @@ void cmd_mkdir(char* name) {
         return;
     }
     
-    // ИСПРАВЛЕНИЕ: Используем новую функцию поиска
+    // Проверяем, существует ли уже такое имя (и файл, и папка)
     if (fat_find_entry(name, 0x00).found) { 
         println("Error: Item already exists.");
         return;
@@ -91,7 +108,7 @@ void cmd_rm(char* name) {
         println("Error: Cannot remove special directories.");
         return;
     }
-    // Вызов функции удаления, которая теперь имеет внутренние защиты от удаления Root-директории и спец.записей.
+    // Функция fat_delete_entry_data уже содержит защиту от удаления системных кластеров
     fat_delete_entry_data(name, 0x00);
 }
 
@@ -139,7 +156,8 @@ void cmd_ls_disk() {
                 FAT16_Entry* entry = (FAT16_Entry*)(sector_buffer + (i * FAT_ENTRY_SIZE));
 
                 if (entry->name[0] == 0x00) goto ls_end; 
-                if (entry->name[0] == 0xE5 || entry->attributes == 0x0F || entry->attributes == 0x08) continue; 
+                // Пропускаем удаленные (0xE5) и LFN (0x0F) и VolumeID (0x08)
+                if ((uint8_t)entry->name[0] == 0xE5 || entry->attributes == 0x0F || entry->attributes == 0x08) continue; 
                 
                 for (int j = 0; j < 8; j++) if (entry->name[j] != ' ') print_char(entry->name[j]);
                 if (!(entry->attributes & 0x10)) { 
@@ -162,7 +180,7 @@ void cmd_ls_disk() {
                 FAT16_Entry* entry = (FAT16_Entry*)(sector_buffer + (i * FAT_ENTRY_SIZE));
 
                 if (entry->name[0] == 0x00) goto ls_end; 
-                if (entry->name[0] == 0xE5 || entry->attributes == 0x0F || entry->attributes == 0x08) continue; 
+                if ((uint8_t)entry->name[0] == 0xE5 || entry->attributes == 0x0F || entry->attributes == 0x08) continue; 
                 
                 for (int j = 0; j < 8; j++) if (entry->name[j] != ' ') print_char(entry->name[j]);
                 if (!(entry->attributes & 0x10)) {
@@ -184,51 +202,42 @@ ls_end:
 
 // Читает файл с диска (FAT16) и печатает его содержимое (только первый сектор)
 void cmd_disk_cat(char* name) {
-    
-    // ИСПРАВЛЕНИЕ: Используем новую структуру FAT_FindResult
+    // ИСПРАВЛЕНО: используем 0x00 для поиска любого типа, затем проверяем атрибуты
     FAT_FindResult result = fat_find_entry(name, 0x00);
-
-    if (!result.found || (result.entry.attributes & 0x10)) { 
-        println("Error: File not found or is a directory.");
+    if (!result.found) {
+        println("Error: File not found.");
         return;
     }
-
+    
+    // Проверяем, что это НЕ директория
+    if (result.entry.attributes & 0x10) {
+        println("Error: This is a directory, not a file.");
+        return;
+    }
+    
     uint16_t start_cluster = result.entry.start_cluster;
-    uint32_t file_size = result.entry.file_size;
-
+    uint32_t filesize = result.entry.file_size;
+    
     if (start_cluster < 2) {
         println("Error: Invalid cluster.");
         return;
     }
-
-    uint32_t data_lba = fat_cluster_to_lba(start_cluster);
     
+    // Читаем данные из кластера
+    uint32_t data_lba = fat_cluster_to_lba(start_cluster);
     ata_read_sector(data_lba);
     
-    // 3. Вывод содержимого
-    println("--- File Content ---");
-    for (uint32_t i = 0; i < file_size && i < 512; i++) {
+    println("--- Content ---");
+    
+    // Выводим только filesize байт, не весь кластер
+    for (uint32_t i = 0; i < filesize && i < 512; i++) {
         print_char(sector_buffer[i]);
     }
-    print_char('\n'); 
-    println("--- End of File ---");
+    print_char('\n');
+    println("--- End ---");
 }
 
-void cmd_ls_vfs() {
-    for(int i=0;i<MAX_FILES;i++){
-        println(fs[i].name);
-    }
-}
 
-void cmd_cat(char* name){
-    for(int i=0;i<MAX_FILES;i++){
-        if(strcmp(fs[i].name,name)==0){
-            println(fs[i].content);
-            return;
-        }
-    }
-    println("File not found");
-}
 
 void cmd_read_disk() {
     println("Reading Sector 0 (Boot Sector)...");
@@ -244,4 +253,65 @@ void cmd_read_disk() {
         }
     }
 }
-// Функции cmd_nano и cmd_create теперь определены в commands/cmd_nano.cpp
+
+void fat_format_disk() {
+    println("FORMAT: Starting FAT16 format");
+
+    uint8_t zero[512] = {0};
+
+    // =========================
+    // 1. Очистка обеих FAT
+    // =========================
+    for (uint32_t fat = 0; fat < FAT_NUMBER_OF_FATS; fat++) {
+        uint32_t fat_base = FAT_START_SECTOR + fat * FAT_SECTORS_PER_FAT;
+
+        for (uint32_t s = 0; s < FAT_SECTORS_PER_FAT; s++) {
+            ata_write_sector(fat_base + s, zero);
+        }
+    }
+
+    println("FORMAT: FAT tables cleared");
+
+    // =========================
+    // 2. Инициализация первых записей FAT
+    // =========================
+    ata_read_sector(FAT_START_SECTOR);
+    uint16_t* fat = (uint16_t*)sector_buffer;
+
+    fat[0] = 0xFFF8; // cluster 0 — media descriptor / reserved
+    fat[1] = 0xFFFF; // cluster 1 — reserved
+
+    // если у тебя root как кластер (НЕ классический FAT16)
+    fat[FAT_ROOT_DIR_CLUSTER] = 0xFFFF;
+
+    ata_write_sector(FAT_START_SECTOR, sector_buffer);
+
+    if (FAT_NUMBER_OF_FATS > 1) {
+        ata_write_sector(FAT_START_SECTOR + FAT_SECTORS_PER_FAT, sector_buffer);
+    }
+
+    println("FORMAT: FAT reserved clusters written");
+
+    // =========================
+    // 3. Очистка root directory
+    // =========================
+    for (uint32_t s = 0; s < FAT_ROOT_DIR_SECTORS; s++) {
+        ata_write_sector(ROOT_DIR_START_SECTOR + s, zero);
+    }
+
+    println("FORMAT: Root directory cleared");
+
+    // =========================
+    // 4. Очистка data area
+    // =========================
+    uint32_t data_start = DATA_START_SECTOR;
+    uint32_t total_data_sectors = fat_get_total_sectors() - data_start;
+
+    for (uint32_t s = 0; s < total_data_sectors; s++) {
+        ata_write_sector(data_start + s, zero);
+    }
+
+    println("FORMAT: Data area cleared");
+
+    println("FORMAT: FAT16 format completed successfully");
+}

@@ -42,6 +42,9 @@ void shell_print_prompt() {
 void shell_redraw() {
     shell_clear_line();
     shell_print_prompt();
+    
+    // Терминируем строку перед выводом
+    buffer[buf_len] = 0;
     print(buffer);
     
     // Установка курсора на нужную позицию
@@ -53,6 +56,7 @@ void shell_redraw() {
     // Обновление cursor_pos для следующей операции print_char
     cursor_pos = current_row * 80 + new_x;
 }
+
 
 void shell_insert_char(char c) {
     if (buf_len >= BUF_SIZE - 1) return; 
@@ -122,11 +126,11 @@ void shell_load_history(int index) {
 // **********************************************
 
 void process_command(){
-    buffer[buf_len]=0; // Используем buf_len
+    buffer[buf_len]=0;
     
-    // 1. Добавляем команду в историю
+    // Добавляем команду в историю
     shell_add_to_history(buffer);
-    history_index = -1; // Сброс индекса истории
+    history_index = -1;
     
     // Локальный буфер для аргументов
     char arg_buf[128] = {0}; 
@@ -134,7 +138,6 @@ void process_command(){
     if(strcmp(buffer,"help")==0){
         println("Commands:");
         println("  help, clear, exit");
-        println("  ls, cat <vfs_file> (VFS commands)");
         println("  pwd, cd <dir>, mkdir <dir>, disk_ls, disk_cat <file>");
         println("  rm <item>, mv <old> <new>");
         println("  nano, create <file>");
@@ -143,10 +146,12 @@ void process_command(){
         cursor_pos=0;
     } else if(strncmp(buffer,"echo ",5)==0){
         println(buffer+5);
+    } else if(strcmp(buffer,"fatcheck")==0){
+        cmd_fat_check();
     } else if(strcmp(buffer,"ls")==0){
-        cmd_ls_vfs();
+        cmd_ls_disk();
     } else if(strncmp(buffer,"cat ",4)==0){
-        cmd_cat(buffer+4);
+        cmd_disk_cat(buffer + 4);
     } else if(strcmp(buffer,"disk_ls")==0){ 
         cmd_ls_disk();
     } else if(strcmp(buffer,"pwd")==0){ 
@@ -165,18 +170,19 @@ void process_command(){
         cmd_info();
     } else if(strncmp(buffer,"create ", 7) == 0){ 
         cmd_create(buffer + 7);
-    } else if(strncmp(buffer,"disk_cat ", 9) == 0){ 
-        cmd_disk_cat(buffer + 9);
     } else if(strcmp(buffer,"read")==0){ 
         cmd_read_disk();
+    } else if(strcmp(buffer,"fsd")==0){ 
+        fat_format_disk();
     } else if(strcmp(buffer,"exit")==0){
         println("Halting...");
         while(1){__asm__ __volatile__("hlt");}
     } else {
         println("Unknown command");
     }
-    
-    // Сброс буфера ввода и курсора
+    for (int i = 0; i < BUF_SIZE; i++) {
+        buffer[i] = 0;
+    }
     buf_len = 0;
     cursor_offset = 0;
 }

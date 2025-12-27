@@ -5,6 +5,7 @@
 #include "keyboard.h"   // Для get_key, клавиатурных констант
 #include "../shell/shell.h" // Для shell_print_prompt, shell_*
 #include "../fs/fat16.h"  // Для FAT16_ROOT_DIR_CLUSTER
+#include "../drivers/disk.h" // ДОБАВИТЬ: для ata_read_sector и sector_buffer
 
 // **********************************************
 // ===== ГЛОБАЛЬНЫЕ ОБЪЯВЛЕНИЯ =====
@@ -24,8 +25,10 @@ extern "C" void kmain(){
     // Очистка и приветствие
     // ОШИБКА В ТЕКСТЕ: "tihs" -> "this"
     for(int i=0;i<80*25;i++) video_memory[i]=0x0F00;
-    println("Welcome to TerminusOS! this is minimal OS");
+    fat_init();
+    println("Welcome to TerminusOS 0.2,5! this is minimal OS");
     println("Type 'help' for commands.");
+    
     
     // Установка курсора в начало строки и вывод приглашения
     cursor_pos = 2 * 80; 
