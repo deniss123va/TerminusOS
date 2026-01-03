@@ -1,14 +1,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "../lib/string.h"
+#include <stdint.h>
 
-extern "C" {
-    // Укорачивает строку dest до последнего '/' (для cd ..)
-    void dirname(char* dest);
-    
-    // Вспомогательная функция для извлечения аргумента (часть команды)
-    char* get_arg(char* command, char* output_buffer);
-}
+void outb(uint16_t port, uint8_t val);
+uint8_t inb(uint16_t port);
+void io_wait(void);
+void dirname(char* path);  // ✅ НОВОЕ
 
-#endif // UTILS_H
+#endif
