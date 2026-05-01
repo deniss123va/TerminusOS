@@ -1,34 +1,43 @@
 #include "utils.h"
+#include "string.h"
 
-// Укорачивает строку dest до последнего '/' (для cd ..)
-void dirname(char* dest) {
-    int len = strlen(dest);
-    if (len <= 1) return; 
-
-    int last_slash = len - 1;
-    while (last_slash > 0 && dest[last_slash] != '/') {
-        last_slash--;
-    }
-
-    if (last_slash > 0) {
-        dest[last_slash] = 0;
-    } else {
-        strcpy(dest, "/"); 
-    }
+void outb(uint16_t port, uint8_t val) {
+    __asm__ __volatile__("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
-// Вспомогательная функция для извлечения аргумента (часть команды)
-char* get_arg(char* command, char* output_buffer) {
-    int start = 0;
-    while(command[start] != ' ' && command[start] != 0) start++;
-    if (command[start] == 0) return 0;
+uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    __asm__ __volatile__("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+void io_wait(void) {
+    outb(0x80, 0);
+}
+
+// ✅ НОВАЯ ФУНКЦИЯ: Убирает последний компонент из пути
+void dirname(char* path) {
+    int len = strlen(path);
     
-    start++;
-    int i = 0;
-    while(command[start + i] != 0) {
-        output_buffer[i] = command[start + i];
-        i++;
+    // Если путь это "/", оставляем как есть
+    if (len <= 1) {
+        return;
     }
-    output_buffer[i] = 0;
-    return output_buffer;
+    
+    // Ищем последний '/'
+    int last_slash = -1;
+    for (int i = len - 1; i >= 0; i--) {
+        if (path[i] == '/') {
+            last_slash = i;
+            break;
+        }
+    }
+    
+    // Если '/' не найден или это корень
+    if (last_slash <= 0) {
+        strcpy(path, "/");
+    } else {
+        // Обрезаем путь после последнего '/'
+        path[last_slash] = 0;
+    }
 }
