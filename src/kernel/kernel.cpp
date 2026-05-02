@@ -7,6 +7,7 @@
 #include "../drivers/disk.h"
 #include "../drivers/rtc.h"
 #include "../lib/config.h"
+#include "../drivers/commands/cmd_uptime.h"
 
 extern "C" {
     void panic(const char* message);
@@ -37,7 +38,7 @@ extern "C" void kmain(){
     
     // Выводим приветствие
     cursor_pos = 80;  // ✅ Строка 1 (80 символов = 80/80 = строка 1)
-    println("Welcome to TerminusOS 0.4.0!");
+    println("Welcome to TerminusOS 0.4.3!");
     println("Type 'help' for commands.");
     // После двух println курсор будет на строке 3 автоматически
     
@@ -57,9 +58,16 @@ extern "C" void kmain(){
         }
         
         if(c==0) continue;
-        
+        cmd_uptime_tick();
         switch(c) {
+            case CHAR_PGUP:
+                shell_handle_pgup();
+                break;
+            case CHAR_PGDN:
+                shell_handle_pgdn();
+                break;
             case '\n':
+                if (shell_is_in_scrollback()) { shell_exit_scrollback(); break; }
                 clear_block_cursor(last_cursor_x, last_cursor_y);
                 tab_reset();
                 history_index = -1;
@@ -88,8 +96,22 @@ extern "C" void kmain(){
                 break;
                 
             case CHAR_ARROW_RIGHT:
-                if (cursor_offset < buf_len) cursor_offset++;
-                shell_redraw();
+                if (cursor_offset < buf_len) {
+                    cursor_offset++;
+                    shell_redraw();
+                } else {
+                    // курсор в конце — принять всю подсказку
+                    shell_tab_accept();
+                }
+                break;
+
+            case CHAR_SHIFT_RIGHT:
+                if (shell_has_suggestion()) {
+                    shell_tab_accept_one();   // принять 1 символ подсказки
+                } else if (cursor_offset < buf_len) {
+                    cursor_offset++;
+                    shell_redraw();
+                }
                 break;
                 
             case CHAR_ARROW_UP:
@@ -117,6 +139,7 @@ extern "C" void kmain(){
                 
             default:
                 if (c >= 32) {
+                    if (shell_is_in_scrollback()) shell_exit_scrollback();
                     shell_insert_char(c);
                 }
                 break;

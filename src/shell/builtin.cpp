@@ -11,6 +11,13 @@
 #include "../drivers/commands/cmd_nano.h"
 #include "../drivers/commands/cmd_help.h"
 #include "../drivers/commands/cmd_clear.h"
+#include "../drivers/commands/сmd_wc.h"
+#include "../drivers/commands/cmd_banner.h"
+#include "../drivers/commands/cmd_uptime.h"
+#include "../drivers/commands/cmd_hexdump.h"
+#include "../drivers/commands/cmd_head.h"
+#include "../drivers/commands/cmd_calc.h"
+#include "../drivers/commands/cmd_panic.h"
 #include "../drivers/rtc.h"
 
 static uint8_t cp_buffer[16384];
@@ -234,12 +241,12 @@ void cmd_shutdown() {
 void cmd_theme(char* arg) {
     if (strlen(arg) == 0) {
         println("Usage: theme <filename.thm> OR <preset>");
-        println("Presets: matrix, ocean, amber");
+        println("Presets: matrix, ocean, amber, red");
         return;
     }
 
     if (strcmp(arg,"matrix")==0 || strcmp(arg,"ocean")==0 ||
-        strcmp(arg,"amber")==0  || strcmp(arg,"default")==0) {
+        strcmp(arg,"amber")==0  || strcmp(arg,"red")==0 || strcmp(arg,"default")==0)  {
         set_theme(arg); goto apply_theme;
     }
 
@@ -255,7 +262,7 @@ void cmd_theme(char* arg) {
         for(int i=0;i<FAT32_BYTES_PER_SECTOR;i++) theme_buf[i]=sector_buffer[i];
         theme_buf[size]=0;
 
-        uint8_t bg=0, fg=7, bar_bg=7, bar_fg=0;
+        uint8_t bg=0, fg=7, bar_bg=7, bar_fg=0, cursor=7;
         char* ptr=(char*)theme_buf, *line_start=ptr;
 
         for(int i=0;i<=(int)size;i++) {
@@ -271,12 +278,12 @@ void cmd_theme(char* arg) {
                     else if(strcmp(key,"FG")==0) fg=cv;
                     else if(strcmp(key,"BAR_BG")==0) bar_bg=cv;
                     else if(strcmp(key,"BAR_FG")==0) bar_fg=cv;
+                    else if(strcmp(key,"CURSOR")==0) cursor=cv;
                 }
                 line_start=&ptr[i+1];
             }
         }
-        set_custom_theme(bg, fg, bar_bg, bar_fg);
-        println("Custom theme loaded.");
+        set_custom_theme(bg, fg, bar_bg, bar_fg, cursor);
     }
 
 apply_theme:
@@ -285,5 +292,6 @@ apply_theme:
     for(int i=80;i<80*25;i++) video_memory[i]=blank;
     cmd_clear();
     shell_draw_status_bar();
+    println("Custom theme loaded.");
     print("\r");
 }

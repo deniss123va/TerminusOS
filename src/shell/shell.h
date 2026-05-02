@@ -61,6 +61,12 @@ void process_command();
 void shell_init_cursor();
 void shell_handle_tab(bool reverse);
 void shell_tab_accept();
+void shell_tab_accept_one();
+bool shell_has_suggestion();
 void tab_reset();
+void shell_handle_pgup();
+void shell_handle_pgdn();
+void shell_exit_scrollback();
+bool shell_is_in_scrollback();
 
 #endif

@@ -76,7 +76,9 @@ char get_key() {
         if (scancode == 0x48) return CHAR_ARROW_UP;
         if (scancode == 0x50) return CHAR_ARROW_DOWN;
         if (scancode == 0x4B) return CHAR_ARROW_LEFT;
-        if (scancode == 0x4D) return CHAR_ARROW_RIGHT;
+        if (scancode == 0x4D) return shift_pressed ? (char)CHAR_SHIFT_RIGHT : (char)CHAR_ARROW_RIGHT;
+        if (scancode == 0x49) return CHAR_PGUP;
+        if (scancode == 0x51) return CHAR_PGDN;
 
         // Tab / Shift+Tab
         if (scancode == 0x0F) return shift_pressed ? (char)CHAR_SHIFT_TAB : (char)CHAR_TAB;
