@@ -1,6 +1,7 @@
 #include "screen.h"
 #include "../drivers/disk.h"
-#include "../lib/string.h" // Для strcmp
+#include "../lib/string.h"
+#include "Scrollback.h"
 
 // ==========================================
 // Глобальные переменные VGA и Темы
@@ -31,6 +32,7 @@ uint8_t theme_bg = VGA_COLOR_BLACK;
 uint8_t theme_fg = VGA_COLOR_WHITE;
 uint8_t theme_bar_bg = VGA_COLOR_LIGHT_GREY;
 uint8_t theme_bar_fg = VGA_COLOR_BLACK;
+uint8_t theme_cursor = VGA_COLOR_WHITE; // Цвет курсора _ (отдельный параметр)
 
 // ==========================================
 // Управление темой
@@ -46,26 +48,37 @@ void set_theme(const char* name) {
         theme_fg = VGA_COLOR_LIGHT_GREEN;
         theme_bar_bg = VGA_COLOR_GREEN;
         theme_bar_fg = VGA_COLOR_BLACK;
+        theme_cursor = VGA_COLOR_LIGHT_GREEN;
     } else if (strcmp(name, "ocean") == 0) {
         theme_bg = VGA_COLOR_BLUE;
         theme_fg = VGA_COLOR_WHITE;
         theme_bar_bg = VGA_COLOR_CYAN;
         theme_bar_fg = VGA_COLOR_BLUE;
+        theme_cursor = VGA_COLOR_LIGHT_CYAN;
     } else if (strcmp(name, "amber") == 0) {
         theme_bg = VGA_COLOR_BLACK;
         theme_fg = VGA_COLOR_LIGHT_BROWN;
         theme_bar_bg = VGA_COLOR_BROWN;
         theme_bar_fg = VGA_COLOR_BLACK;
+        theme_cursor = VGA_COLOR_LIGHT_BROWN;
     } else if (strcmp(name, "bsod") == 0) {
         theme_bg = VGA_COLOR_BLUE;
         theme_fg = VGA_COLOR_WHITE;
         theme_bar_bg = VGA_COLOR_WHITE;
         theme_bar_fg = VGA_COLOR_BLUE;
+        theme_cursor = VGA_COLOR_LIGHT_GREY;
+    } else if (strcmp(name, "red") == 0) {
+        theme_bg = VGA_COLOR_BLACK;
+        theme_fg = VGA_COLOR_RED;
+        theme_bar_bg = VGA_COLOR_RED;
+        theme_bar_fg = VGA_COLOR_WHITE;
+        theme_cursor = VGA_COLOR_LIGHT_RED;
     } else { // default / classic
         theme_bg = VGA_COLOR_BLACK;
         theme_fg = VGA_COLOR_WHITE;
         theme_bar_bg = VGA_COLOR_LIGHT_GREY;
         theme_bar_fg = VGA_COLOR_BLACK;
+        theme_cursor = VGA_COLOR_WHITE;
     }
 }
 
@@ -90,29 +103,30 @@ void draw_block_cursor(int x, int y) {
     int pos = y * 80 + x;
     uint16_t current = video_memory[pos];
     uint8_t ch = current & 0xFF;
-    
-    // Вместо инверсии текущего цвета, используем инвертированный цвет темы
-    uint8_t inverted_color = (theme_fg << 4) | theme_bg;
-    
+
+    // Сохраняем оригинальный символ под курсором (если там не пробел/пусто)
+    // Рисуем _ с цветом theme_cursor на фоне темы
+    uint8_t cursor_color = (theme_bg << 4) | theme_cursor;
+
     if (ch == ' ' || ch == 0) {
-        ch = 219; // Блок
+        ch = '_'; // Курсор-подчёркивание
     }
-    
-    video_memory[pos] = (inverted_color << 8) | ch;
+
+    video_memory[pos] = (cursor_color << 8) | ch;
 }
 
 void clear_block_cursor(int x, int y) {
     int pos = y * 80 + x;
     uint16_t current = video_memory[pos];
     uint8_t ch = current & 0xFF;
-    
+
     // Восстанавливаем обычный цвет
     uint8_t normal_color = get_theme_color();
 
-    if (ch == 219) {
+    if (ch == '_') {
         ch = ' ';
     }
-    
+
     video_memory[pos] = (normal_color << 8) | ch;
 }
 
@@ -136,6 +150,9 @@ void print_char(char c) {
         for (int i = 0; i < 80; i++) {
             statusbar_backup[i] = video_memory[i];
         }
+
+        // Сохраняем строку 1 в scrollback перед тем как она уедет
+        scrollback_push((const uint16_t*)(video_memory + 80));
 
         // Прокручиваем ВСЕ строки 1-24 вверх
         for (int row = 1; row < 24; row++) {
@@ -180,9 +197,10 @@ void print_hex_byte(uint8_t byte) {
     print_char(to_hex(byte & 0x0F));
 }
 
-void set_custom_theme(uint8_t bg, uint8_t fg, uint8_t bar_bg, uint8_t bar_fg) {
+void set_custom_theme(uint8_t bg, uint8_t fg, uint8_t bar_bg, uint8_t bar_fg, uint8_t cursor) {
     theme_bg = bg & 0x0F;
     theme_fg = fg & 0x0F;
     theme_bar_bg = bar_bg & 0x0F;
     theme_bar_fg = bar_fg & 0x0F;
+    theme_cursor = cursor & 0x0F;
 }

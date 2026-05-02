@@ -11,6 +11,7 @@ extern uint8_t theme_bg;
 extern uint8_t theme_fg;
 extern uint8_t theme_bar_bg;
 extern uint8_t theme_bar_fg;
+extern uint8_t theme_cursor;
 
 void set_theme(const char* name);
 uint8_t get_theme_color();
@@ -26,7 +27,7 @@ extern "C" {
     char to_hex(uint8_t val);
     void print_hex_byte(uint8_t byte);
     void shell_init_status_bar();
-    void set_custom_theme(uint8_t bg, uint8_t fg, uint8_t bar_bg, uint8_t bar_fg);
+    void set_custom_theme(uint8_t bg, uint8_t fg, uint8_t bar_bg, uint8_t bar_fg, uint8_t cursor);
 
 }
 

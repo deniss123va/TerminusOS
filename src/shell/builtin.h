@@ -7,6 +7,13 @@
 #include "../drivers/commands/cmd_data.h"
 #include "../drivers/commands/cmd_help.h"
 #include "../drivers/commands/cmd_clear.h"
+#include "../drivers/commands/сmd_wc.h"
+#include "../drivers/commands/cmd_banner.h"
+#include "../drivers/commands/cmd_uptime.h"
+#include "../drivers/commands/cmd_hexdump.h"
+#include "../drivers/commands/cmd_head.h"
+#include "../drivers/commands/cmd_calc.h"
+#include "../drivers/commands/cmd_panic.h"
 
 // FAT32
 extern uint32_t current_dir_cluster; // shell

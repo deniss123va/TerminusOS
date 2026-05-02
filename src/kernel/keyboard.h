@@ -10,6 +10,9 @@ extern bool shift_pressed;
 #define CHAR_SHIFT_TAB   6
 #define CHAR_F3          132
 #define CHAR_F4          133
+#define CHAR_PGUP        5
+#define CHAR_PGDN        7
+#define CHAR_SHIFT_RIGHT 16
 
 extern "C" char get_key();
 
