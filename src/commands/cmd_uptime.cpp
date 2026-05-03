@@ -1,41 +1,64 @@
 #include "cmd_uptime.h"
 #include "../lib/screen.h"
+#include "../drivers/rtc.h"
 
-// Счётчик итераций главного цикла.
-// Главный цикл крутится ~1000 раз/сек (зависит от железа/QEMU),
-// поэтому делим на TICKS_PER_SEC для приблизительного времени.
-#define TICKS_PER_SEC 1000
+// ─── Boot timestamp (секунды с начала суток) ──────────────────────────────────
+// Сохраняем при старте; при переходе через полночь прибавляем 86400.
+// Для хобби-ОС этого более чем достаточно.
 
-static uint32_t uptime_ticks = 0;
+static uint32_t boot_seconds = 0;
+static bool     boot_saved   = false;
 
-void cmd_uptime_tick() {
-    uptime_ticks++;
+// Перевод RTC_Time → секунды с начала суток (0..86399)
+static uint32_t rtc_to_secs(const RTC_Time& t) {
+    return (uint32_t)t.hour   * 3600
+         + (uint32_t)t.minute * 60
+         + (uint32_t)t.second;
 }
 
-static void print_num2(uint32_t n) {
+// Вызвать один раз из kmain после rtc_init()
+void uptime_init() {
+    RTC_Time t = rtc_read_time();
+    boot_seconds = rtc_to_secs(t);
+    boot_saved   = true;
+}
+
+// ─── Вспомогательный вывод числа с ведущим нулём ─────────────────────────────
+static void print_d2(uint32_t n) {
     if (n < 10) print_char('0');
-    char buf[12]; int i = 0;
     if (n == 0) { print_char('0'); return; }
-    while (n > 0) { buf[i++] = '0' + n % 10; n /= 10; }
-    for (int j = i-1; j >= 0; j--) print_char(buf[j]);
+    char buf[4]; int i = 0;
+    while (n) { buf[i++] = '0' + n % 10; n /= 10; }
+    for (int j = i - 1; j >= 0; j--) print_char(buf[j]);
 }
 
+// ─── Команда ─────────────────────────────────────────────────────────────────
 void cmd_uptime() {
-    uint32_t secs  = uptime_ticks / TICKS_PER_SEC;
-    uint32_t mins  = secs / 60;   secs %= 60;
-    uint32_t hours = mins / 60;   mins %= 60;
-    uint32_t days  = hours / 24;  hours %= 24;
+    if (!boot_saved) { println("uptime: not initialized"); return; }
+
+    RTC_Time now = rtc_read_time();
+    uint32_t now_secs = rtc_to_secs(now);
+
+    // Обработка перехода через полночь
+    uint32_t elapsed = (now_secs >= boot_seconds)
+                     ? now_secs - boot_seconds
+                     : now_secs + 86400 - boot_seconds;
+
+    uint32_t secs  = elapsed % 60;
+    uint32_t mins  = (elapsed / 60) % 60;
+    uint32_t hours = (elapsed / 3600) % 24;
+    uint32_t days  = elapsed / 86400;
 
     print("up ");
-    if (days)  { print_num2(days);  print("d "); }
-    print_num2(hours); print(":");
-    print_num2(mins);  print(":");
-    print_num2(secs);
-    print("  (ticks: ");
-    // print raw ticks
-    char buf[12]; int i = 0;
-    uint32_t t = uptime_ticks;
-    if (t == 0) { print_char('0'); }
-    else { while (t) { buf[i++] = '0' + t%10; t /= 10; } for (int j=i-1;j>=0;j--) print_char(buf[j]); }
+    if (days) { print_d2(days); print("d "); }
+    print_d2(hours); print(":");
+    print_d2(mins);  print(":");
+    print_d2(secs);
+
+    // Текущее время для справки
+    print("  (now ");
+    print_d2(now.hour); print(":");
+    print_d2(now.minute); print(":");
+    print_d2(now.second);
     println(")");
 }

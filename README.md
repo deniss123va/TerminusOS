@@ -1,120 +1,147 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-</head>
-<body>
+# 🛠 TerminusOS v0.4.3 — Quality of Life Update
 
-<h1>🌌 TerminusOS v0.4.0</h1>
+> Incremental release focused on shell usability, editor improvements, new developer tools, and a reworked codebase structure.
 
-<p><strong>TerminusOS</strong> is a hobbyist operating system developed from scratch in C++ and x86 Assembly. The project focuses on learning low-level hardware interaction, kernel architecture, and filesystem implementation.</p>
-<img src="images/info.png" alt="TerminusOS Info Screen">
+---
 
-<hr>
+## ⏱ `uptime` — System Uptime via RTC
 
-<h2>🚀 Key Features (v0.4.0)</h2>
+Displays how long the system has been running, read directly from the **Real-Time Clock** — accurate regardless of CPU speed or emulator.
 
-<ul>
-    <li><strong>FAT32 Filesystem:</strong> Full support for reading, creating, deleting, and renaming files and directories.</li>
-    <img src="images/dir2.png" alt="FAT32 Filesystem Navigation" width="500">
-    <li><strong>"Nano" Text Editor:</strong> A built-in console editor supporting arrow-key navigation and direct disk saving.</li>
-    <img src="images/nano.png" alt="Nano Text Editor" width="500">
-    <li><strong>Interrupt Handling:</strong> Implemented Interrupt Descriptor Table (IDT), handling CPU exceptions (ISR) and hardware interrupts (IRQ).</li>
-    <li><strong>Keyboard Driver:</strong> Support for scan codes, Shift, Caps Lock, and functional keys.</li>
-    <li><strong>UI Customization:</strong> Theme system (Classic, Matrix, Ocean) loaded via <code>boot.cfg</code>.</li>
-    <li><strong>Real-Time Clock (RTC):</strong> CMOS integration to display system time and date in the status bar.</li>
-</ul>
+```
+up 00:03:36  (now 23:35:35)
+```
 
-<hr>
+![uptime](images/image.png)
 
-<h2>📂 Project Structure</h2>
+---
 
-<table border="1">
-    <tr>
-        <th>Directory</th>
-        <th>Description</th>
-    </tr>
-    <tr>
-        <td><code>kernel/</code></td>
-        <td>Core logic: screen management, IDT, and <code>kmain</code> entry point.</td>
-    </tr>
-    <tr>
-        <td><code>drivers/</code></td>
-        <td>Hardware drivers: Keyboard, ATA (disk), and RTC.</td>
-    </tr>
-    <tr>
-        <td><code>fs/</code></td>
-        <td>FAT32 filesystem implementation logic.</td>
-    </tr>
-    <tr>
-        <td><code>shell/</code></td>
-        <td>Command-line interface and built-in system utilities.</td>
-    </tr>
-    <tr>
-        <td><code>lib/</code></td>
-        <td>Standard library: string manipulation and I/O port operations.</td>
-    </tr>
-</table>
+## 🧮 `calc` — Expression Calculator
 
-<hr>
+Integer expression calculator with full operator support.
 
-<h2>🎨 Available Themes</h2>
-<div class="gallery">
-    <div class="gallery-item">
-        <img src="images/matrix.png" alt="Matrix Theme">
-        <p>Matrix</p>
-    </div>
-    <div class="gallery-item">
-        <img src="images/amber.png" alt="Amber Theme">
-        <p>Amber</p>
-    </div>
-    <div class="gallery-item">
-        <img src="images/ocean.png" alt="Ocean Theme">
-        <p>Ocean</p>
-    </div>
-    <div class="gallery-item">
-        <img src="images/custom.png" alt="Custom Theme">
-        <p>Custom (Red/Black)</p>
-    </div>
-</div>
+**Arithmetic & power:**
 
-<hr>
+![calc power and shifts](images/image__5_.png)
 
-<h2>🛠 Technical Stack</h2>
+**Bitwise operations & hex literals:**
 
-<ul>
-    <li><strong>Languages:</strong> C++, x86 Assembly.</li>
-    <li><strong>Architecture:</strong> x86 (32-bit Protected Mode).</li>
-    <li><strong>Toolchain:</strong> GCC Cross-Compiler.</li>
-</ul>
+![calc bitwise](images/image__6_.png)
 
-<hr>
+| Feature | Example | Result |
+|---|---|---|
+| Power | `calc 2**10` | `1024` |
+| Bit shift | `calc 1 << 8` | `256` |
+| AND | `calc 0xFF & 0x0F` | `15` |
+| OR | `calc 0xDEAD \| 0x0010` | `57021` |
+| XOR | `calc 0xFF ^ 0xAA` | `85` |
+| NOT | `calc ~0xFF` | `-256` |
+| Hex literals | `calc 0xFF & ~15` | `240` |
 
-<h2>⌨️ Shell Commands</h2>
-<img src="images/help.png" alt="Available Shell Commands" width="600">
+Results are shown in both **decimal and hex** automatically.
 
-<ul>
-    <li><code>help</code> — Show available commands.</li>
-    <li><code>info</code> — System and developer information.</li>
-    <li><code>ls</code> — List directory contents.</li>
-    <img src="images/dir.png" alt="List directory command" width="450">
-    <li><code>date</code> — Display current date and time.</li>
-    <li><code>nano &lt;filename&gt;</code> — Launch the text editor.</li>
-    <li><code>theme &lt;name&gt;</code> — Switch the visual color scheme.</li>
-</ul>
+---
 
-<hr>
+## 📝 Nano Editor Overhaul
 
-<h2>⚠️ Error Handling</h2>
+The built-in text editor received a significant upgrade:
 
-<p>The system features a <strong>Kernel Panic</strong> mechanism. If a critical error or unhandled exception occurs (e.g., Division by Zero), the kernel halts the CPU and displays diagnostic information on a red background.</p>
+- **Larger buffer** — maximum lines increased from 20 to **200**
+- **Vertical scrolling** — editor scrolls when content exceeds visible area
+- **Line numbers** — 4-character gutter on the left
+- **Undo / Redo** — up to 64 levels (`Ctrl+Z` / `Ctrl+Y`)
+- **Text selection** — basic selection support added
 
-<hr>
+![nano with line numbers](images/image__4_.png)
 
-<h2>👨‍💻 Author</h2>
-<p>YouTube: <a href="https://www.youtube.com/@Zero-Logic-dev">Zero Logic</a></p>
-<p>Telegram: <a href="https://t.me/den2010991">@den2010991</a></p>
-<p>GitHub: <a href="https://github.com/deniss123va">deniss123va</a></p>
+---
 
-</body>
-</html>
+## 🎨 `banner` — ASCII Art Text
+
+Renders text using a built-in **5×7 bitmap font**. Supports A–Z, 0–9, and `! ? . -`.
+Output can be redirected directly to a file:
+
+```
+banner HELLO > text.txt
+```
+
+![banner redirect and cat](images/image__1_.png)
+
+---
+
+## 🖥 Terminal Scrollback
+
+A scrollback buffer stores up to **300 lines** of previous output.
+
+- **`PgUp`** — scroll back (3 lines per step)
+- **`PgDn`** — scroll forward
+- Any other key returns to the live view
+- Status bar shows position: `[SCROLL] PgUp=back  PgDn=fwd  Any key=exit  LINE:7/30`
+
+![scrollback and ls with colors](images/image__3_.png)
+
+---
+
+## 📁 `ls` — Long Filename & Color Support
+
+Directory listing now reads **FAT32 LFN entries** and applies **theme colors**:
+
+- Directories shown in `theme_dir` color (cyan by default)
+- Files shown in `theme_file` color
+
+---
+
+## 🔍 `head` & `hexdump` — File Inspection Tools
+
+**`head <file> [N]`** — print the first N lines of a file (default: 10).
+
+**`hexdump <file>`** — display raw file contents as a hex + ASCII dump.
+
+![head and hexdump](images/image__2_.png)
+
+---
+
+## ➡ Output Redirection
+
+Any command output can be written to a file using `>`:
+
+```
+echo Hello, World! > greet.txt
+banner VAY > vay.txt
+```
+
+If the target file already exists it is overwritten. A confirmation with byte count is printed on success.
+
+---
+
+## 📊 `wc` — Word Count
+
+Counts lines, words, and characters in a file:
+
+```
+wc text.txt
+```
+
+---
+
+## 🏗 Architecture Refactor
+
+Internal code layout reorganized for clarity and scalability:
+
+| Change | Before | After |
+|---|---|---|
+| Command files | `drivers/commands/` | `commands/` (top-level) |
+| Screen / Settings | `kernel/` | `lib/` |
+| FAT32 driver | `fs/` | `drivers/` |
+| Command dispatch | Scattered in `shell.cpp` | Centralized `commands/cmd_registry.cpp` |
+| FAT16 support | Present | **Removed** (FAT32 only) |
+
+The new `cmd_registry.cpp` holds a unified dispatch table — adding new commands requires editing only one file.
+
+---
+
+## 👨‍💻 Author
+
+YouTube: [Zero Logic](https://www.youtube.com/@Zero-Logic-dev)  
+Telegram: [@den2010991](https://t.me/den2010991)  
+GitHub: [deniss123va](https://github.com/deniss123va)

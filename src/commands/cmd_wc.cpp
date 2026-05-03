@@ -3,7 +3,6 @@
 #include "../drivers/fat32.h"
 #include "../drivers/disk.h"
 #include "../lib/string.h"
-#include "../kernel/panic.h"
 
 extern uint8_t sector_buffer[512];
 extern void ata_read_sector(uint32_t lba);

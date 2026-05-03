@@ -557,6 +557,8 @@ void process_command() {
     int  dlen = strlen(buffer);
 
     for (int i = 0; i < dlen; i++) {
+        if (buffer[i] == '>' && buffer[i+1] == '>') { i++; continue; }
+        
         if (buffer[i] == '>') {
             // Копируем часть до '>' как команду
             for (int j = 0; j < i; j++) dispatch_buf[j] = buffer[j];

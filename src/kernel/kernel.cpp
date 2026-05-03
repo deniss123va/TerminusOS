@@ -20,7 +20,9 @@ extern "C" void kmain(){
     
     // Инициализация RTC
     rtc_init();
-    
+
+    // Инициализация Uptime
+    uptime_init();
     // Отключаем мигающий курсор
     disable_vga_cursor();
     
@@ -59,7 +61,6 @@ extern "C" void kmain(){
         }
         
         if(c==0) continue;
-        cmd_uptime_tick();
         switch(c) {
             case CHAR_PGUP:
                 shell_handle_pgup();

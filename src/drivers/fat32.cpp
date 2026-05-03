@@ -403,7 +403,7 @@ void fat32_delete_entry(const char* name, uint8_t target_attr) {
     e_in_buf->name[0] = (char)0xE5;
 
     ata_write_sector(lba, sector_buffer);
-    println("FAT32: Entry deleted");
+    //println("FAT32: Entry deleted");
 }
 
 // **********************************************
@@ -469,7 +469,7 @@ bool fat32_create_file(const char* name, const char* content, uint32_t size) {
     FAT32_SET_CLUSTER(entry, clusters[0]);
 
     ata_write_sector(dir_lba, sector_buffer);
-    println("FAT32: File created");
+    //println("FAT32: File created");
     return true;
 }
 
@@ -537,7 +537,7 @@ void fat32_create_dir(char* name) {
     FAT32_SET_CLUSTER(new_entry, new_cluster);
 
     ata_write_sector(parent_lba, sector_buffer);
-    println("FAT32: Directory created");
+    //println("FAT32: Directory created");
 }
 
 // **********************************************
@@ -561,7 +561,7 @@ void fat32_rename_entry(char* old_name, char* new_name) {
 
     fat32_format_name(new_name, entry->name);
     ata_write_sector(lba, sector_buffer);
-    println("FAT32: Renamed successfully");
+    //println("FAT32: Renamed successfully");
 }
 
 // **********************************************

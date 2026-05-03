@@ -1,9 +1,12 @@
 #ifndef CMD_UPTIME_H
 #define CMD_UPTIME_H
 
-extern "C" {
-    void cmd_uptime_tick();   // вызывать из главного цикла каждую итерацию
-    void cmd_uptime();        // вывести uptime
-}
+#include <stdint.h>
+
+// Вызвать один раз из kmain после rtc_init()
+void uptime_init();
+
+// Вывести uptime в формате:  up [Xd] HH:MM:SS  (now HH:MM:SS)
+void cmd_uptime();
 
 #endif
