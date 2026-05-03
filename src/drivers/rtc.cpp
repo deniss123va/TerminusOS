@@ -1,5 +1,5 @@
 #include "rtc.h"
-#include "../kernel/screen.h"
+#include "../lib/screen.h"
 
 // Port definitions
 #define CMOS_ADDRESS 0x70

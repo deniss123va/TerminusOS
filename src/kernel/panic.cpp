@@ -1,5 +1,5 @@
 #include "panic.h"
-#include "screen.h"
+#include "../lib/screen.h"
 
 extern "C" {
     void panic(const char* message) {

@@ -1,5 +1,5 @@
 #include "cmd_info.h"
-#include "../../kernel/screen.h"
+#include "../lib/screen.h"
 
 void cmd_info(){
     println("================================================================================");
@@ -20,4 +20,3 @@ void cmd_info(){
     println("  Type 'help' for all commands");
     println("================================================================================");
 }
-

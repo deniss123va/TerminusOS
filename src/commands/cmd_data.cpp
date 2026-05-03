@@ -1,6 +1,6 @@
 #include "cmd_data.h"  // ✅ Было: cmd_time.h
-#include "../../kernel/screen.h"
-#include "../rtc.h"
+#include "../lib/screen.h"
+#include "../drivers/rtc.h"
 
 void cmd_date() {
     RTC_Time time = rtc_read_time();

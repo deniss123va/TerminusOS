@@ -1,5 +1,5 @@
 #include "keyboard.h"
-#include "../kernel/screen.h"
+#include "../lib/screen.h"
 
 // Порты контроллера клавиатуры
 #define KEYBOARD_DATA_PORT 0x60
@@ -10,11 +10,17 @@
 #define SCAN_LSHIFT_RELEASE 0xAA
 #define SCAN_RSHIFT_PRESS 0x36
 #define SCAN_RSHIFT_RELEASE 0xB6
-#define SCAN_CAPSLOCK 0x3A
+#define SCAN_CAPSLOCK       0x3A
+#define SCAN_LCTRL_PRESS    0x1D
+#define SCAN_LCTRL_RELEASE  0x9D
 
 // Глобальные флаги
 bool shift_pressed = false;
-bool caps_lock = false;
+bool caps_lock     = false;
+static bool ctrl_pressed = false;
+// E0-префикс расширенных клавиш (стрелки, Del, Home и т.д.)
+// Нужен чтобы не спутать "фиктивный" shift (E0+0x2A / E0+0xAA) с настоящим
+static bool e0_prefix = false;
 
 // Таблица соответствия скан-кодов ASCII символам (без Shift)
 static char scan_code_table[] = {
@@ -41,72 +47,95 @@ static inline uint8_t inb(uint16_t port) {
     return ret;
 }
 
-char get_key() {
+uint8_t get_key() {
     uint8_t status = inb(KEYBOARD_STATUS_PORT);
     
-    // Если буфер полон (бит 0 установлен)
     if (status & 0x01) {
         uint8_t scancode = inb(KEYBOARD_DATA_PORT);
-        
-        // Обработка отпускания Shift
+
+        // ── E0-префикс: расширенные клавиши (стрелки, Del, Home …) ──────────
+        // Запоминаем, что следующий байт идёт с E0-префиксом.
+        if (scancode == 0xE0) { e0_prefix = true; return 0; }
+
+        // ── Ctrl ─────────────────────────────────────────────────────────────
+        if (scancode == SCAN_LCTRL_PRESS)   { ctrl_pressed = true;  e0_prefix = false; return 0; }
+        if (scancode == SCAN_LCTRL_RELEASE) { ctrl_pressed = false; e0_prefix = false; return 0; }
+
+        // ── Shift ─────────────────────────────────────────────────────────────
+        // E0+0x2A и E0+0xAA — «фиктивный» shift, который клавиатура посылает
+        // вокруг расширенных клавиш (стрелки, PgUp …).  Его НЕЛЬЗЯ трактовать
+        // как нажатие/отпускание настоящего Shift, иначе shift_pressed
+        // сбросится в false до того как мы обработаем стрелку.
         if (scancode == SCAN_LSHIFT_RELEASE || scancode == SCAN_RSHIFT_RELEASE) {
-            shift_pressed = false;
+            if (!e0_prefix) shift_pressed = false;   // настоящий Shift-release
+            e0_prefix = false;
             return 0;
         }
-        
-        // Обработка нажатия Shift
         if (scancode == SCAN_LSHIFT_PRESS || scancode == SCAN_RSHIFT_PRESS) {
-            shift_pressed = true;
+            if (!e0_prefix) shift_pressed = true;    // настоящий Shift-press
+            e0_prefix = false;
             return 0;
         }
 
-        // Обработка Caps Lock (только нажатие)
+        // ── Caps Lock ─────────────────────────────────────────────────────────
         if (scancode == SCAN_CAPSLOCK) {
             caps_lock = !caps_lock;
+            e0_prefix = false;
             return 0;
         }
 
-        // Если это отпускание клавиши (бит 7 установлен), игнорируем (кроме Shift выше)
+        // ── Отпускание любой клавиши (бит 7) ─────────────────────────────────
         if (scancode & 0x80) {
+            e0_prefix = false;
             return 0;
         }
-        
-        // Обработка стрелок (расширенные коды, упрощенно для примера)
-        // В реальном драйвере нужно обрабатывать 0xE0 префикс корректно
-        if (scancode == 0x48) return CHAR_ARROW_UP;
-        if (scancode == 0x50) return CHAR_ARROW_DOWN;
-        if (scancode == 0x4B) return CHAR_ARROW_LEFT;
-        if (scancode == 0x4D) return shift_pressed ? (char)CHAR_SHIFT_RIGHT : (char)CHAR_ARROW_RIGHT;
-        if (scancode == 0x49) return CHAR_PGUP;
-        if (scancode == 0x51) return CHAR_PGDN;
 
-        // Tab / Shift+Tab
-        if (scancode == 0x0F) return shift_pressed ? (char)CHAR_SHIFT_TAB : (char)CHAR_TAB;
+        // ── Ctrl+буква ────────────────────────────────────────────────────────
+        if (ctrl_pressed) {
+            e0_prefix = false;
+            if (scancode == 0x21) return CHAR_CTRL_F;
+            if (scancode == 0x2E) return CHAR_CTRL_C;
+            if (scancode == 0x2F) return CHAR_CTRL_V;
+            if (scancode == 0x1E) return CHAR_CTRL_A;
+            if (scancode == 0x12) return CHAR_CTRL_E;
+            if (scancode == 0x2C) return shift_pressed ? CHAR_CTRL_SHIFT_Z : CHAR_CTRL_Z;
+        }
 
-        // Преобразование в ASCII
+        // ── ESC ───────────────────────────────────────────────────────────────
+        if (scancode == 0x01) {
+            e0_prefix = false;
+            if (ctrl_pressed)  return CHAR_CTRL_ESC;
+            if (shift_pressed) return CHAR_SHIFT_ESC;
+            return 27;
+        }
+
+        // ── Del / Home / End ──────────────────────────────────────────────────
+        if (scancode == 0x53) { e0_prefix = false; return CHAR_DEL;  }
+        if (scancode == 0x47) { e0_prefix = false; return CHAR_HOME; }
+        if (scancode == 0x4F) { e0_prefix = false; return CHAR_END;  }
+
+        // ── Стрелки (с Shift или без) ─────────────────────────────────────────
+        if (scancode == 0x48) { e0_prefix = false; return shift_pressed ? CHAR_SHIFT_UP    : CHAR_ARROW_UP;    }
+        if (scancode == 0x50) { e0_prefix = false; return shift_pressed ? CHAR_SHIFT_DOWN  : CHAR_ARROW_DOWN;  }
+        if (scancode == 0x4B) { e0_prefix = false; return shift_pressed ? CHAR_SHIFT_LEFT  : CHAR_ARROW_LEFT;  }
+        if (scancode == 0x4D) { e0_prefix = false; return shift_pressed ? CHAR_SHIFT_RIGHT : CHAR_ARROW_RIGHT; }
+
+        // ── PgUp / PgDn ───────────────────────────────────────────────────────
+        if (scancode == 0x49) { e0_prefix = false; return CHAR_PGUP; }
+        if (scancode == 0x51) { e0_prefix = false; return CHAR_PGDN; }
+
+        // ── Tab / Shift+Tab ───────────────────────────────────────────────────
+        if (scancode == 0x0F) { e0_prefix = false; return shift_pressed ? (char)CHAR_SHIFT_TAB : (char)CHAR_TAB; }
+
+        // ── Обычные символы ───────────────────────────────────────────────────
+        e0_prefix = false;
         if (scancode < sizeof(scan_code_table)) {
             char c = 0;
-            
-            // Логика выбора таблицы
             if (shift_pressed) {
-                // Если нажат Shift, берем из shift-таблицы
-                // Учитываем Caps Lock для букв (инверсия)
-                // Но проще просто взять из Shift таблицы, она уже содержит большие буквы
-                // Если нужен правильный CapsLock + Shift (инверсия), логика сложнее
-                
-                // Простая логика: Shift имеет приоритет
                 c = scan_code_table_shift[scancode];
-                
-                // Если CapsLock включен и это буква, можно инвертировать обратно в малую (опционально)
-                // Но обычно Shift+Letter при CapsLock дает малую букву.
-                // Пока оставим просто Shift таблицу.
             } else {
                 c = scan_code_table[scancode];
-                
-                // Если CapsLock включен и это буква (a-z)
-                if (caps_lock && c >= 'a' && c <= 'z') {
-                    c -= 32; // Преобразуем в заглавную
-                }
+                if (caps_lock && c >= 'a' && c <= 'z') c -= 32;
             }
             return c;
         }

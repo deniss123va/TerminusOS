@@ -1,12 +1,16 @@
 #include "shell.h"
-#include "../kernel/screen.h"
+#include "../lib/screen.h"
 #include "../lib/string.h"
 #include "../lib/utils.h"
 #include "../drivers/rtc.h"
-#include "../fs/fat32.h"
+#include "../drivers/fat32.h"
 #include "builtin.h"
-#include "../kernel/scrollback.h"
-#include "../drivers/commands/cmd_registry.h"
+#include "../lib/scrollback.h"
+#include "../commands/cmd_registry.h"
+
+// Нужные символы из disk.h — объявляем вручную чтобы не тянуть конфликтующий disk.h
+extern uint8_t sector_buffer[512];
+extern "C" void ata_read_sector(uint32_t lba);
 
 void cmd_theme(char* name);
 
@@ -45,7 +49,7 @@ static char tab_prefix[128] = {0};
 static int  tab_prefix_start = 0;
 
 // Команды и Левенштейн теперь в cmd_registry.cpp
-#include "../drivers/commands/cmd_registry.h"
+#include "../commands/cmd_registry.h"
 
 // ─── Status bar ──────────────────────────────────────────────────────────────
 
@@ -322,6 +326,76 @@ void shell_load_history(int index) {
     shell_redraw();
 }
 
+// ─── История: сохранение и загрузка с диска ───────────────────────────────────
+
+static const char HIST_FILENAME[] = "HIST.DAT";
+
+void shell_save_history_file() {
+    static char hist_content[HISTORY_SIZE * BUF_SIZE + 2];
+    int pos = 0;
+    int start_idx = HISTORY_SIZE - history_count;
+    for (int i = start_idx; i < HISTORY_SIZE; i++) {
+        if (history[i][0] == 0) continue;
+        int len = strlen(history[i]);
+        for (int j = 0; j < len; j++) hist_content[pos++] = history[i][j];
+        hist_content[pos++] = '\n';
+    }
+    hist_content[pos] = 0;
+
+    // Всегда сохраняем в корне, независимо от текущей директории
+    uint32_t saved_cluster = current_dir_cluster;
+    current_dir_cluster = FAT32_ROOT_CLUSTER;
+
+    if (fat32_find_entry(HIST_FILENAME, 0x00).found)
+        fat32_delete_entry(HIST_FILENAME, 0x00);
+    fat32_create_file(HIST_FILENAME, hist_content, pos);
+
+    current_dir_cluster = saved_cluster;
+}
+
+void shell_load_history_file() {
+    // Всегда читаем из корня
+    uint32_t saved_cluster = current_dir_cluster;
+    current_dir_cluster = FAT32_ROOT_CLUSTER;
+
+    FAT32_FindResult res = fat32_find_entry(HIST_FILENAME, 0x00);
+    if (!res.found) { current_dir_cluster = saved_cluster; return; }
+    uint32_t size    = res.entry.file_size;
+    uint32_t cluster = FAT32_GET_CLUSTER(&res.entry);
+    if (size == 0 || cluster < 2) { current_dir_cluster = saved_cluster; return; }
+
+    static char content[HISTORY_SIZE * BUF_SIZE + 4];
+    uint32_t bytes_read = 0;
+    uint32_t max_bytes  = (uint32_t)(HISTORY_SIZE * BUF_SIZE);
+
+    while ((cluster & FAT32_MASK) < (FAT32_EOC & FAT32_MASK) &&
+           bytes_read < size && bytes_read < max_bytes) {
+        uint32_t lba = fat32_cluster_to_lba(cluster);
+        for (int sec = 0; sec < FAT32_SECTORS_PER_CLUSTER &&
+                          bytes_read < size && bytes_read < max_bytes; sec++) {
+            ata_read_sector(lba + sec);
+            for (int i = 0; i < 512 && bytes_read < size && bytes_read < max_bytes; i++)
+                content[bytes_read++] = sector_buffer[i];
+        }
+        cluster = fat32_get_next_cluster(cluster);
+    }
+    content[bytes_read] = 0;
+
+    // Парсим строки и добавляем в историю
+    char line[BUF_SIZE];
+    int  li = 0;
+    for (uint32_t i = 0; i <= bytes_read; i++) {
+        char ch = content[i];
+        if (ch == '\n' || ch == '\r' || ch == 0) {
+            if (li > 0) { line[li] = 0; shell_add_to_history(line); li = 0; }
+        } else if (li < BUF_SIZE - 1) {
+            line[li++] = ch;
+        }
+    }
+
+    current_dir_cluster = saved_cluster;
+}
+
 static void get_last_word(char* out, int* start_out) {
     int start = 0;
     for (int i = 0; i < cursor_offset; i++)
@@ -427,15 +501,121 @@ void shell_tab_accept_one() {
 
 bool shell_has_suggestion() { return tab_match_index >= 0; }
 
+// Проверяет, существует ли команда в таблице
+static bool cmd_exists(const char* name) {
+    int name_len = 0;
+    while (name[name_len] && name[name_len] != ' ') name_len++;
+    
+    for (int i = 0; i < CMD_TABLE_SIZE; i++) {
+        if (strncmp(CMD_TABLE[i].name, name, name_len) == 0 && 
+            CMD_TABLE[i].name[name_len] == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ─── Команды ─────────────────────────────────────────────────────────────────
 
 void process_command() {
     buffer[buf_len] = 0;
-    shell_add_to_history(buffer);
+
+    // ── !N — выполнить команду №N из истории ──────────────────────────────
+    if (buffer[0] == '!' && buf_len > 1) {
+        int n = 0;
+        for (int i = 1; i < buf_len; i++)
+            if (buffer[i] >= '0' && buffer[i] <= '9')
+                n = n * 10 + (buffer[i] - '0');
+        if (n >= 1 && n <= history_count) {
+            int arr_idx = HISTORY_SIZE - history_count + (n - 1);
+            strcpy(buffer, history[arr_idx]);
+            buf_len = strlen(buffer);
+        } else {
+            print_char('\n');
+            print("history: no event #");
+            // печатаем n
+            char nbuf[8]; int ni = 0;
+            int tmp = n;
+            if (tmp == 0) { nbuf[ni++] = '0'; }
+            else {
+                char rev[8]; int ri = 0;
+                while (tmp > 0) { rev[ri++] = (char)('0' + tmp % 10); tmp /= 10; }
+                for (int k = ri - 1; k >= 0; k--) nbuf[ni++] = rev[k];
+            }
+            nbuf[ni] = 0;
+            println(nbuf);
+            for (int i = 0; i < BUF_SIZE; i++) buffer[i] = 0;
+            buf_len = 0; cursor_offset = 0;
+            return;
+        }
+    }
+
+    // ── Проверяем редирект вывода > ───────────────────────────────────────
+    char redirect_file[64] = {0};
+    char dispatch_buf[BUF_SIZE];
+    bool has_redirect = false;
+    int  dlen = strlen(buffer);
+
+    for (int i = 0; i < dlen; i++) {
+        if (buffer[i] == '>') {
+            // Копируем часть до '>' как команду
+            for (int j = 0; j < i; j++) dispatch_buf[j] = buffer[j];
+            int clen = i;
+            while (clen > 0 && dispatch_buf[clen - 1] == ' ') clen--;
+            dispatch_buf[clen] = 0;
+            // Имя файла — после '>'
+            const char* fn = buffer + i + 1;
+            while (*fn == ' ') fn++;
+            int fi = 0;
+            while (fn[fi] && fn[fi] != ' ' && fi < 63)
+                { redirect_file[fi] = fn[fi]; fi++; }
+            redirect_file[fi] = 0;
+            has_redirect = (fi > 0 && clen > 0);
+            break;
+        }
+    }
+    if (!has_redirect) {
+        for (int i = 0; i <= dlen; i++) dispatch_buf[i] = buffer[i];
+    }
+
+    // Проверяем, что команда не пустая
+    int cmd_len = 0;
+    for (int i = 0; dispatch_buf[i]; i++) {
+        if (dispatch_buf[i] != ' ') cmd_len++;
+    }
+    if (cmd_len == 0) {
+        for (int i = 0; i < BUF_SIZE; i++) buffer[i] = 0;
+        buf_len = 0;
+        cursor_offset = 0;
+        return;
+    }
+
+    // Добавляем в историю только если команда существует
+    if (cmd_exists(dispatch_buf)) {
+        shell_add_to_history(buffer);
+        shell_save_history_file();    // сохраняем историю на диск
+    }
     shell_save_executed_command(buffer);
     print_char('\n');
 
-    cmd_dispatch(buffer);
+    if (has_redirect) redirect_start();
+    cmd_dispatch(dispatch_buf);
+    if (has_redirect) {
+        int   rlen = redirect_get_len();
+        const char* rout = redirect_get_buf();
+        if (fat32_find_entry(redirect_file, 0x00).found)
+            fat32_delete_entry(redirect_file, 0x00);
+        bool ok = fat32_create_file(redirect_file, rout, rlen);
+        redirect_stop();
+        if (ok) { print("Saved "); print(redirect_file); print(" ("); 
+                  // печатаем размер
+                  char sb[8]; int si=0, sv=rlen;
+                  if(sv==0){sb[si++]='0';}else{char r[8];int ri=0;
+                    while(sv>0){r[ri++]=(char)('0'+sv%10);sv/=10;}
+                    for(int k=ri-1;k>=0;k--)sb[si++]=r[k];}
+                  sb[si]=0; print(sb); println(" bytes)"); }
+        else println("Redirect: write failed.");
+    }
 
     for (int i = 0; i < BUF_SIZE; i++) buffer[i] = 0;
     buf_len = 0;

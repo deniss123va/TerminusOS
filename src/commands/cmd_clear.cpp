@@ -1,7 +1,7 @@
 #include "cmd_clear.h"
-#include "../../kernel/screen.h"
-#include "../../shell/shell.h"
-#include "../../kernel/Scrollback.h"
+#include "../lib/screen.h"
+#include "../shell/shell.h"
+#include "../lib/scrollback.h"
 
 void cmd_clear() {
     uint8_t attr = get_theme_color();

@@ -1,6 +1,6 @@
 #include "cmd_settings.h"
-#include "../kernel/screen.h"
-#include "../kernel/settings.h"
+#include "../lib/screen.h"
+#include "../lib/settings.h"
 #include "../lib/string.h"
 
 void cmd_settings(const char* args) {

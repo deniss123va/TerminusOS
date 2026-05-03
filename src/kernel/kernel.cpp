@@ -1,13 +1,13 @@
 #include <stdint.h>
 #include <stdbool.h>
-#include "screen.h"
+#include "../lib/screen.h"
 #include "keyboard.h"
 #include "../shell/shell.h"
-#include "../fs/fat32.h"
+#include "../drivers/fat32.h"
 #include "../drivers/disk.h"
 #include "../drivers/rtc.h"
 #include "../lib/config.h"
-#include "../drivers/commands/cmd_uptime.h"
+#include "../commands/cmd_uptime.h"
 
 extern "C" {
     void panic(const char* message);
@@ -28,6 +28,7 @@ extern "C" void kmain(){
     for(int i=0;i<80*25;i++) video_memory[i]=0x0F00;
     
     config_load();
+    shell_load_history_file();   // восстанавливаем историю команд с диска
     uint8_t attr = get_theme_color();
     uint16_t blank = (attr << 8) | ' ';
     for(int i=0; i<80*25; i++) video_memory[i]=blank;
@@ -49,7 +50,7 @@ extern "C" void kmain(){
     static int tick_counter = 0;
     
     while(1){
-        char c = get_key();
+        uint8_t c = get_key();
         
         // Обновляем время каждые 50 итераций
         if(++tick_counter > 50) {
@@ -83,6 +84,41 @@ extern "C" void kmain(){
 
             case CHAR_SHIFT_TAB:
                 shell_handle_tab(true);
+                break;
+
+            case CHAR_DEL: {
+                // Delete — удалить символ под курсором (справа)
+                if (cursor_offset < buf_len) {
+                    for (int i = cursor_offset; i < buf_len; i++) buffer[i] = buffer[i+1];
+                    buf_len--;
+                    buffer[buf_len] = 0;
+                    shell_redraw();
+                }
+                break;
+            }
+
+            case CHAR_CTRL_C:
+                // Очистить буфер ввода
+                clear_block_cursor(last_cursor_x, last_cursor_y);
+                buf_len = 0;
+                cursor_offset = 0;
+                buffer[0] = 0;
+                tab_reset();
+                print_char('\n');
+                shell_print_prompt();
+                shell_init_cursor();
+                break;
+
+            case CHAR_CTRL_A:
+            case CHAR_HOME:
+                cursor_offset = 0;
+                shell_redraw();
+                break;
+
+            case CHAR_CTRL_E:
+            case CHAR_END:
+                cursor_offset = buf_len;
+                shell_redraw();
                 break;
 
                 

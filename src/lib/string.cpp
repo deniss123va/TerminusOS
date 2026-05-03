@@ -50,3 +50,14 @@ void* memcpy(void* dest, const void* src, size_t n) {
     }
     return dest;
 }
+
+char* strstr(const char* haystack, const char* needle) {
+    if (!needle || !needle[0]) return (char*)haystack;
+    for (; *haystack; haystack++) {
+        const char* h = haystack;
+        const char* n = needle;
+        while (*h && *n && *h == *n) { h++; n++; }
+        if (!*n) return (char*)haystack;
+    }
+    return nullptr;
+}

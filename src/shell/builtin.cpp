@@ -1,23 +1,23 @@
 #include "builtin.h"
-#include "../kernel/screen.h"
+#include "../lib/screen.h"
 #include "../kernel/keyboard.h"
-#include "../kernel/cmd_settings.h"
+#include "../lib/cmd_settings.h"
 #include "../drivers/disk.h"
-#include "../fs/fat32.h"
+#include "../drivers/fat32.h"
 #include "../lib/string.h"
 #include "../lib/utils.h"
 #include "shell.h"
-#include "../drivers/commands/cmd_info.h"
-#include "../drivers/commands/cmd_nano.h"
-#include "../drivers/commands/cmd_help.h"
-#include "../drivers/commands/cmd_clear.h"
-#include "../drivers/commands/сmd_wc.h"
-#include "../drivers/commands/cmd_banner.h"
-#include "../drivers/commands/cmd_uptime.h"
-#include "../drivers/commands/cmd_hexdump.h"
-#include "../drivers/commands/cmd_head.h"
-#include "../drivers/commands/cmd_calc.h"
-#include "../drivers/commands/cmd_panic.h"
+#include "../commands/cmd_info.h"
+#include "../commands/cmd_nano.h"
+#include "../commands/cmd_help.h"
+#include "../commands/cmd_clear.h"
+#include "../commands/cmd_wc.h"
+#include "../commands/cmd_banner.h"
+#include "../commands/cmd_uptime.h"
+#include "../commands/cmd_hexdump.h"
+#include "../commands/cmd_head.h"
+#include "../commands/cmd_calc.h"
+#include "../commands/cmd_panic.h"
 #include "../drivers/rtc.h"
 
 static uint8_t cp_buffer[16384];
@@ -30,6 +30,22 @@ int my_atoi(const char* str) {
 }
 
 void cmd_pwd() { println(current_path); }
+
+void cmd_history() {
+    if (history_count == 0) { println("History is empty."); return; }
+    int start_idx = HISTORY_SIZE - history_count;
+    for (int i = 0; i < history_count; i++) {
+        // Номер
+        int n = i + 1;
+        char nbuf[8];
+        int ni = 0;
+        if (n >= 10) nbuf[ni++] = (char)('0' + n / 10);
+        nbuf[ni++] = (char)('0' + n % 10);
+        nbuf[ni++] = ' '; nbuf[ni++] = ' '; nbuf[ni] = 0;
+        print(nbuf);
+        println(history[start_idx + i]);
+    }
+}
 
 void cmd_fat_check() {
     println("=== FAT32 Table Check ===");
@@ -130,6 +146,13 @@ void cmd_ls_disk() {
     println("--- Disk Directory (FAT32) ---");
     uint32_t c = current_dir_cluster;
 
+    uint8_t attr_file = (theme_bg << 4) | (theme_file & 0x0F);
+    uint8_t attr_dir  = (theme_bg << 4) | (theme_dir  & 0x0F);
+
+    // Буфер для LFN (до 32 символов)
+    char lfn_buf[33];
+    int  lfn_len = 0;
+
     while ((c & FAT32_MASK) >= 2 && (c & FAT32_MASK) < (FAT32_EOC & FAT32_MASK)) {
         uint32_t base_lba = fat32_cluster_to_lba(c);
         for (uint8_t sec = 0; sec < FAT32_SECTORS_PER_CLUSTER; sec++) {
@@ -137,10 +160,89 @@ void cmd_ls_disk() {
             for (int i = 0; i < FAT32_ENTRIES_PER_SECTOR; i++) {
                 FAT32_DirEntry* e = (FAT32_DirEntry*)(sector_buffer + i * FAT32_ENTRY_SIZE);
                 if (e->name[0] == 0x00) goto ls_end;
-                if ((uint8_t)e->name[0] == 0xE5 || e->attributes == 0x0F || e->attributes == 0x08) continue;
-                for (int j=0;j<8;j++) if(e->name[j]!=' ') print_char(e->name[j]);
-                if (!(e->attributes & 0x10)) { print_char('.'); for(int j=0;j<3;j++) if(e->ext[j]!=' ') print_char(e->ext[j]); }
-                if (e->attributes & 0x10) print(" <DIR>");
+                if ((uint8_t)e->name[0] == 0xE5) { lfn_len = 0; continue; }
+                if (e->attributes == 0x08) continue; // volume label
+
+                // LFN запись
+                if (e->attributes == 0x0F) {
+                    // Структура LFN: bytes 1-10 (5 UCS-2), 14-23 (6), 28-31 (2) = 13 символов
+                    // Берём только младший байт каждого UCS-2 символа
+                    uint8_t* raw = (uint8_t*)e;
+                    // Определяем порядковый номер (бит 6 = последняя запись)
+                    uint8_t ord = raw[0] & 0x3F;
+                    // Для простоты накапливаем LFN в обратном порядке и потом переворачиваем
+                    // Но т.к. LFN-записи идут от последней к первой, просто читаем символы
+                    char chunk[13]; int ci = 0;
+                    // bytes 1,3,5,7,9 (5 символов)
+                    for (int k = 1; k <= 9; k += 2) {
+                        if (raw[k] != 0xFF && raw[k] != 0x00) chunk[ci++] = (char)raw[k];
+                        else if (raw[k] == 0x00) chunk[ci++] = 0;
+                    }
+                    // bytes 14,16,18,20,22,24 (6 символов)
+                    for (int k = 14; k <= 24; k += 2) {
+                        if (raw[k] != 0xFF && raw[k] != 0x00) chunk[ci++] = (char)raw[k];
+                        else if (raw[k] == 0x00) chunk[ci++] = 0;
+                    }
+                    // bytes 28,30 (2 символа)
+                    for (int k = 28; k <= 30; k += 2) {
+                        if (raw[k] != 0xFF && raw[k] != 0x00) chunk[ci++] = (char)raw[k];
+                        else if (raw[k] == 0x00) chunk[ci++] = 0;
+                    }
+                    // Вставляем в начало lfn_buf (LFN-записи идут в обратном порядке)
+                    // Сдвигаем существующее содержимое вправо
+                    int chlen = 0;
+                    while (chlen < 13 && chunk[chlen] != 0) chlen++;
+                    if (lfn_len + chlen < 32) {
+                        for (int k = lfn_len - 1; k >= 0; k--)
+                            lfn_buf[k + chlen] = lfn_buf[k];
+                        for (int k = 0; k < chlen; k++)
+                            lfn_buf[k] = chunk[k];
+                        lfn_len += chlen;
+                    }
+                    lfn_buf[lfn_len] = 0;
+                    continue;
+                }
+
+                bool is_dir = (e->attributes & 0x10) != 0;
+                uint8_t attr = is_dir ? attr_dir : attr_file;
+
+                // Выводим имя: LFN если есть, иначе 8.3
+                if (lfn_len > 0) {
+                    for (int j = 0; j < lfn_len; j++)
+                        print_char_colored(lfn_buf[j], attr);
+                    lfn_len = 0;
+                } else {
+                    // 8.3 имя
+                    for (int j = 0; j < 8; j++)
+                        if (e->name[j] != ' ') print_char_colored(e->name[j], attr);
+                    if (!is_dir) {
+                        bool has_ext = false;
+                        for (int j = 0; j < 3; j++) if (e->ext[j] != ' ') { has_ext = true; break; }
+                        if (has_ext) {
+                            print_char_colored('.', attr);
+                            for (int j = 0; j < 3; j++)
+                                if (e->ext[j] != ' ') print_char_colored(e->ext[j], attr);
+                        }
+                    }
+                }
+
+                // Тег <DIR> или размер
+                if (is_dir) {
+                    const char* tag = " <DIR>";
+                    for (int j = 0; tag[j]; j++) print_char_colored(tag[j], attr);
+                } else {
+                    uint32_t sz = e->file_size;
+                    char szbuf[12]; int si = 0;
+                    if (sz == 0) { szbuf[si++] = '0'; }
+                    else {
+                        char tmp[12]; int ti = 0;
+                        while (sz > 0) { tmp[ti++] = (char)('0' + sz % 10); sz /= 10; }
+                        for (int j = ti - 1; j >= 0; j--) szbuf[si++] = tmp[j];
+                    }
+                    szbuf[si++] = 'B'; szbuf[si] = 0;
+                    print_char_colored(' ', attr_file);
+                    for (int j = 0; j < si; j++) print_char_colored(szbuf[j], attr_file);
+                }
                 print_char('\n');
             }
         }
@@ -262,7 +364,8 @@ void cmd_theme(char* arg) {
         for(int i=0;i<FAT32_BYTES_PER_SECTOR;i++) theme_buf[i]=sector_buffer[i];
         theme_buf[size]=0;
 
-        uint8_t bg=0, fg=7, bar_bg=7, bar_fg=0, cursor=7;
+        uint8_t bg=0, fg=7, bar_bg=7, bar_fg=0, cursor=7,
+                cursor_bg=7, cursor_char=0, dir=11, file=7;
         char* ptr=(char*)theme_buf, *line_start=ptr;
 
         for(int i=0;i<=(int)size;i++) {
@@ -274,16 +377,20 @@ void cmd_theme(char* arg) {
                     *eq=0; char* key=line_start, *val=eq+1;
                     int vlen=strlen(val); if(vlen>0&&val[vlen-1]=='\r') val[vlen-1]=0;
                     int cv=my_atoi(val);
-                    if(strcmp(key,"BG")==0) bg=cv;
-                    else if(strcmp(key,"FG")==0) fg=cv;
-                    else if(strcmp(key,"BAR_BG")==0) bar_bg=cv;
-                    else if(strcmp(key,"BAR_FG")==0) bar_fg=cv;
-                    else if(strcmp(key,"CURSOR")==0) cursor=cv;
+                    if     (strcmp(key,"BG"         )==0) bg          = cv;
+                    else if(strcmp(key,"FG"         )==0) fg          = cv;
+                    else if(strcmp(key,"BAR_BG"     )==0) bar_bg      = cv;
+                    else if(strcmp(key,"BAR_FG"     )==0) bar_fg      = cv;
+                    else if(strcmp(key,"CURSOR"     )==0) cursor      = cv;
+                    else if(strcmp(key,"CURSOR_BG"  )==0) cursor_bg   = cv;
+                    else if(strcmp(key,"CURSOR_CHAR")==0) cursor_char = cv;
+                    else if(strcmp(key,"DIR"        )==0) dir         = cv;
+                    else if(strcmp(key,"FILE"       )==0) file        = cv;
                 }
                 line_start=&ptr[i+1];
             }
         }
-        set_custom_theme(bg, fg, bar_bg, bar_fg, cursor);
+        set_custom_theme(bg, fg, bar_bg, bar_fg, cursor, cursor_bg, cursor_char, dir, file);
     }
 
 apply_theme:

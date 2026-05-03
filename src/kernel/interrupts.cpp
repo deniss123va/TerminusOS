@@ -1,5 +1,5 @@
 #include "interrupts.h"
-#include "screen.h" 
+#include "../lib/screen.h" 
 #include "panic.h" 
 #include "../drivers/disk.h" // Для inb, outb
 

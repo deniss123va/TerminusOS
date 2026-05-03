@@ -1,6 +1,6 @@
 #include "cmd_banner.h"
-#include "../../kernel/screen.h"
-#include "../../lib/string.h"
+#include "../lib/screen.h"
+#include "../lib/string.h"
 
 // 5x7 ASCII-арт шрифт, только заглавные буквы A-Z и цифры 0-9
 // Каждый символ: 7 строк по 5 бит (MSB слева)

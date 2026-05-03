@@ -1,5 +1,5 @@
 #include "cmd_help.h"
-#include "../../kernel/screen.h"
+#include "../lib/screen.h"
 
 void cmd_help(){
     println("Available commands:");

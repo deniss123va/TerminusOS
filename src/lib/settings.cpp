@@ -1,6 +1,6 @@
 #include "settings.h"
-#include "../kernel/screen.h"
-#include "../fs/fat32.h"
+#include "../lib/screen.h"
+#include "../drivers/fat32.h"
 #include "../drivers/disk.h"
 #include "../lib/string.h"
 

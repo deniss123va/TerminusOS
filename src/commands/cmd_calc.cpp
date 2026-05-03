@@ -1,6 +1,6 @@
 #include "cmd_calc.h"
-#include "../../kernel/screen.h"
-#include "../../lib/string.h"
+#include "../lib/screen.h"
+#include "../lib/string.h"
 
 // ─── Рекурсивный парсер выражений ────────────────────────────────────────────
 // Поддерживает: + - * / % ( ) унарный минус, целая арифметика

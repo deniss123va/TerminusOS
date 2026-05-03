@@ -12,6 +12,7 @@ extern "C" {
     void strcat(char* dest, const char* src);
     void memset(void* ptr, int value, size_t num);
     void* memcpy(void* dest, const void* src, size_t n);
+    char* strstr(const char* haystack, const char* needle);
 }
 
 #endif // STRING_H

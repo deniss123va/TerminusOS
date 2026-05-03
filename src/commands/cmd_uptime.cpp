@@ -1,5 +1,5 @@
 #include "cmd_uptime.h"
-#include "../../kernel/screen.h"
+#include "../lib/screen.h"
 
 // Счётчик итераций главного цикла.
 // Главный цикл крутится ~1000 раз/сек (зависит от железа/QEMU),

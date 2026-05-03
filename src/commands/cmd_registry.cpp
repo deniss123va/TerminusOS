@@ -1,6 +1,6 @@
 #include "cmd_registry.h"
-#include "../../kernel/screen.h"
-#include "../../lib/string.h"
+#include "../lib/screen.h"
+#include "../lib/string.h"
 
 // ─── Подключаем все команды ───────────────────────────────────────────────────
 #include "cmd_clear.h"
@@ -9,18 +9,20 @@
 #include "cmd_info.h"
 #include "cmd_nano.h"
 #include "cmd_calc.h"
-#include "сmd_wc.h"
+#include "cmd_wc.h"
 #include "cmd_head.h"
 #include "cmd_hexdump.h"
 #include "cmd_uptime.h"
 #include "cmd_banner.h"
 #include "cmd_panic.h"
+#include "cmd_meminfo.h"
 
 // Команды из builtin (shell/builtin.h) — сигнатуры char*, не const char*
 extern void cmd_fat_check();
 extern void cmd_ls_disk();
 extern void cmd_disk_cat(char* name);
 extern void cmd_pwd();
+extern void cmd_history();
 extern void cmd_cd(char* path);
 extern void cmd_mkdir(char* name);
 extern void cmd_rm(char* name);
@@ -34,6 +36,7 @@ extern void cmd_shutdown();
 extern void cmd_theme(char* name);
 extern void cmd_settings(const char* args);
 extern void cmd_panic();
+extern void cmd_meminfo();
 
 // Обёртки char* → const char* для таблицы
 static void wrap_disk_cat(const char* a){ cmd_disk_cat((char*)a); }
@@ -60,6 +63,7 @@ const CmdEntry CMD_TABLE[] = {
     { "clear",     ARG_NONE,  cmd_clear,      nullptr,                  nullptr },
     { "ls",        ARG_NONE,  cmd_ls_disk,    nullptr,                  nullptr },
     { "pwd",       ARG_NONE,  cmd_pwd,        nullptr,                  nullptr },
+    { "history",   ARG_NONE,  cmd_history,    nullptr,                  nullptr },
     { "date",      ARG_NONE,  cmd_date,       nullptr,                  nullptr },
     { "fatcheck",  ARG_NONE,  cmd_fat_check,  nullptr,                  nullptr },
     { "read",      ARG_NONE,  cmd_read_disk,  nullptr,                  nullptr },
@@ -67,6 +71,7 @@ const CmdEntry CMD_TABLE[] = {
     { "reboot",    ARG_NONE,  cmd_reboot,     nullptr,                  nullptr },
     { "shutdown",  ARG_NONE,  cmd_shutdown,   nullptr,                  nullptr },
     { "exit",      ARG_NONE,  cmd_shutdown,   nullptr,                  nullptr },
+    { "meminfo",   ARG_NONE,  cmd_meminfo,    nullptr,                  nullptr },
     { "info",      ARG_NONE,  cmd_info,       nullptr,                  nullptr },
     { "uptime",    ARG_NONE,  cmd_uptime,     nullptr,                  nullptr },
     { "panic",     ARG_NONE,  cmd_panic,       nullptr,                  nullptr },

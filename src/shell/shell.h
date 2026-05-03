@@ -1,7 +1,7 @@
 #ifndef SHELL_H
 #define SHELL_H
 
-#include "../drivers/commands/cmd_nano.h"
+#include "../commands/cmd_nano.h"
 #include <stdint.h>
 
 #define VGA_COLOR_BLACK 0
@@ -57,6 +57,8 @@ void shell_insert_char(char c);
 void shell_delete_char();
 void shell_add_to_history(const char* cmd);
 void shell_load_history(int index);
+void shell_save_history_file();
+void shell_load_history_file();
 void process_command();
 void shell_init_cursor();
 void shell_handle_tab(bool reverse);

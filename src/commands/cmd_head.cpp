@@ -1,8 +1,8 @@
 #include "cmd_head.h"
-#include "../../kernel/screen.h"
-#include "../../fs/fat32.h"
-#include "../../drivers/disk.h"
-#include "../../lib/string.h"
+#include "../lib/screen.h"
+#include "../drivers/fat32.h"
+#include "../drivers/disk.h"
+#include "../lib/string.h"
 
 extern uint8_t sector_buffer[512];
 extern void ata_read_sector(uint32_t lba);

@@ -1,5 +1,5 @@
 #include "disk.h"
-#include "../kernel/screen.h" // Для println
+#include "../lib/screen.h" // Для println
 
 // Константы ATA
 #define ATA_PRIMARY_DATA 0x1F0
