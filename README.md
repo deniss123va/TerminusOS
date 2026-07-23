@@ -47,7 +47,7 @@ On top of that, the kernel now speaks **ATAPI** and reads real **ISO 9660** file
 ls              # shows "cdrom <DIR>" at the root if a disc is mounted
 cd /cdrom
 ls
-cat readme.txt
+cat boot.cat
 ```
 
 ![cdrom mounted and browsed](images/cdrom_browse.png)
@@ -77,5 +77,5 @@ Nano got rebuilt again since 0.4.3, on every axis:
 
 ## 👨‍💻 Author
 
-YouTube: [Zero Logic](https://www.youtube.com/@Zero-Logic-dev)
-Telegram: [@den2010991](https://t.me/den2010991)
+- **YouTube:** [Zero Logic](https://www.youtube.com/@Zero-Logic-dev)
+- **Telegram:** [@den2010991](https://telegram.me/den2010991)
